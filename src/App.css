@@ -1,184 +1,1197 @@
-.counter {
-  font-size: 16px;
-  padding: 5px 10px;
-  border-radius: 5px;
-  color: var(--accent);
-  background: var(--accent-bg);
-  border: 2px solid transparent;
-  transition: border-color 0.3s;
-  margin-bottom: 24px;
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  Home,
+  Heart,
+  MessageCircle,
+  Send,
+  LogOut,
+  Wind,
+  Smile,
+  BookOpen,
+  MoreVertical,
+  Trash2,
+  Play,
+  Pause,
+  Volume2,
+  VolumeX,
+  Plus,
+  Eye,
+  EyeOff,
+  ShieldCheck,
+  ChevronLeft,
+  ChevronRight
+} from 'lucide-react';
+import { supabase } from './lib/supabase';
 
-  &:hover {
-    border-color: var(--accent-border);
-  }
-  &:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
+const CATEGORIES = ['Semua', 'Kesehatan Mental', 'Pendidikan', 'Pekerjaan', 'Asmara', 'Keluarga', 'Pertemanan', 'Diri Sendiri', 'Lain-lain'];
+
+const AVATARS = ['🦊', '🐼', '🐰', '🐯', '🐨', '🐧', '🦉', '🦄', '🌸', '🌵', '🌙', '🌊', '🍁', '🍄', '🦋', '🐢'];
+
+const REACTIONS_LIST = [
+  { id: 'hugs', icon: '🤗', label: 'Peluk' },
+  { id: 'hearts', icon: '❤️', label: 'Cinta' },
+  { id: 'support', icon: '💪', label: 'Semangat' },
+  { id: 'sad', icon: '😢', label: 'Sedih' },
+  { id: 'pray', icon: '🙏', label: 'Doa' },
+];
+
+function timeAgo(dateString) {
+  const seconds = Math.floor((new Date() - new Date(dateString)) / 1000);
+  if (seconds < 60) return 'Baru saja';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} menit yang lalu`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} jam yang lalu`;
+  const days = Math.floor(hours / 24);
+  return `${days} hari yang lalu`;
 }
 
-.hero {
-  position: relative;
-
-  .base,
-  .framework,
-  .vite {
-    inset-inline: 0;
-    margin: 0 auto;
-  }
-
-  .base {
-    width: 170px;
-    position: relative;
-    z-index: 0;
-  }
-
-  .framework,
-  .vite {
-    position: absolute;
-  }
-
-  .framework {
-    z-index: 1;
-    top: 34px;
-    height: 28px;
-    transform: perspective(2000px) rotateZ(300deg) rotateX(44deg) rotateY(39deg)
-      scale(1.4);
-  }
-
-  .vite {
-    z-index: 0;
-    top: 107px;
-    height: 26px;
-    width: auto;
-    transform: perspective(2000px) rotateZ(300deg) rotateX(40deg) rotateY(39deg)
-      scale(0.8);
-  }
+function Logo({ className }) {
+  const [imgError, setImgError] = useState(false);
+  if (imgError) return <Wind className={`${className} text-teal-600`} />;
+  // Taruh file logo kamu di folder public/logo.png -- kalau belum ada, otomatis fallback ke ikon Wind
+  return <img src="/logo.png" alt="Sirkel Mental" className={`${className} object-contain`} onError={() => setImgError(true)} />;
 }
 
-#center {
-  display: flex;
-  flex-direction: column;
-  gap: 25px;
-  place-content: center;
-  place-items: center;
-  flex-grow: 1;
+export default function App() {
+  const [currentUser, setCurrentUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [pendingSession, setPendingSession] = useState(null); // session ada, tapi profil belum dibuat (dipakai untuk Google OAuth baru)
+  const [activeTab, setActiveTab] = useState('cerita');
 
-  @media (max-width: 1024px) {
-    padding: 32px 20px 24px;
-    gap: 18px;
-  }
-}
+  const [stories, setStories] = useState([]);
+  const [gratitudes, setGratitudes] = useState([]);
 
-#next-steps {
-  display: flex;
-  border-top: 1px solid var(--border);
-  text-align: left;
-
-  & > div {
-    flex: 1 1 0;
-    padding: 32px;
-    @media (max-width: 1024px) {
-      padding: 24px 20px;
+  const fetchProfile = useCallback(async (userId) => {
+    const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+    if (error) {
+      console.error('Gagal mengambil profil:', error.message);
+      return null;
     }
+    return data;
+  }, []);
+
+  // Pantau status login (termasuk setelah redirect Google OAuth)
+  useEffect(() => {
+    let mounted = true;
+
+    const syncSession = async (session) => {
+      if (!session?.user) {
+        if (mounted) { setCurrentUser(null); setPendingSession(null); }
+        return;
+      }
+      const profile = await fetchProfile(session.user.id);
+      if (!mounted) return;
+      if (profile) {
+        setCurrentUser({ ...profile, email: session.user.email });
+        setPendingSession(null);
+      } else {
+        // Login berhasil (biasanya lewat Google) tapi belum punya profil -> minta lengkapi
+        setPendingSession(session);
+        setCurrentUser(null);
+      }
+    };
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      syncSession(session).finally(() => { if (mounted) setAuthLoading(false); });
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      syncSession(session);
+    });
+
+    return () => {
+      mounted = false;
+      listener.subscription.unsubscribe();
+    };
+  }, [fetchProfile]);
+
+  const fetchStories = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('stories')
+      .select('id, category, content, reactions, created_at, author:profiles!author_id(id, display_name, avatar), comments(id, text, created_at, author:profiles!author_id(display_name, avatar, role))')
+      .order('created_at', { ascending: false });
+
+    if (error) { console.error('Gagal mengambil cerita:', error.message); return; }
+
+    setStories(
+      (data || []).map(s => ({
+        id: s.id,
+        authorId: s.author?.id,
+        author: s.author?.display_name || 'Anonim',
+        avatar: s.author?.avatar || '🦊',
+        category: s.category,
+        content: s.content,
+        time: timeAgo(s.created_at),
+        reactions: s.reactions || {},
+        comments: (s.comments || [])
+          .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+          .map(c => ({
+            id: c.id,
+            author: c.author?.display_name || 'Anonim',
+            avatar: c.author?.avatar || '🦊',
+            isAdmin: c.author?.role === 'admin',
+            text: c.text
+          }))
+      }))
+    );
+  }, []);
+
+  const fetchGratitudes = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('gratitudes')
+      .select('id, text, color, reactions, created_at, author:profiles!author_id(display_name, avatar)')
+      .order('created_at', { ascending: false });
+
+    if (error) { console.error('Gagal mengambil catatan syukur:', error.message); return; }
+
+    setGratitudes(
+      (data || []).map(g => ({
+        id: g.id,
+        text: g.text,
+        author: g.author?.display_name || 'Anonim',
+        avatar: g.author?.avatar || '🦊',
+        color: g.color,
+        reactions: g.reactions || {}
+      }))
+    );
+  }, []);
+
+  useEffect(() => {
+    fetchStories();
+    fetchGratitudes();
+  }, [fetchStories, fetchGratitudes]);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setCurrentUser(null);
+    setActiveTab('cerita');
+  };
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="w-8 h-8 border-2 border-slate-300 border-t-teal-500 rounded-full animate-spin" />
+      </div>
+    );
   }
 
-  .icon {
-    margin-bottom: 16px;
-    width: 22px;
-    height: 22px;
+  if (!currentUser) {
+    return <AuthScreen pendingSession={pendingSession} onProfileReady={(profile, email) => setCurrentUser({ ...profile, email })} />;
   }
 
-  @media (max-width: 1024px) {
-    flex-direction: column;
-    text-align: center;
-  }
+  return (
+    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-50 via-slate-50 to-teal-50 font-sans text-slate-800 flex flex-col selection:bg-teal-200 selection:text-teal-900 overflow-hidden">
+      <TopBar user={currentUser} onLogout={handleLogout} onOpenProfile={() => setActiveTab('ceritaku')} />
+
+      <main className="flex-1 overflow-y-auto pt-24 pb-28 relative scroll-smooth h-[100dvh]">
+        <div className="max-w-2xl mx-auto px-4 md:px-0">
+          {activeTab === 'cerita' && (
+            <RuangCerita
+              stories={stories}
+              refetchStories={fetchStories}
+              isAdmin={currentUser.role === 'admin'}
+              currentUser={currentUser}
+            />
+          )}
+          {activeTab === 'grateful' && (
+            <WallOfGrateful
+              gratitudes={gratitudes}
+              refetchGratitudes={fetchGratitudes}
+              isAdmin={currentUser.role === 'admin'}
+              currentUser={currentUser}
+            />
+          )}
+          {activeTab === 'ceritaku' && (
+            <Ceritaku
+              stories={stories}
+              refetchStories={fetchStories}
+              isAdmin={currentUser.role === 'admin'}
+              currentUser={currentUser}
+            />
+          )}
+          {activeTab === 'relax' && <RuangRelaksasi />}
+          {activeTab === 'dashboard' && currentUser.role === 'admin' && <AdminDashboard />}
+        </div>
+      </main>
+
+      <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} user={currentUser} />
+    </div>
+  );
 }
 
-#docs {
-  border-right: 1px solid var(--border);
+function AuthScreen({ pendingSession, onProfileReady }) {
+  // 'login' | 'register' | 'google_setup'
+  const [view, setView] = useState(pendingSession ? 'google_setup' : 'login');
 
-  @media (max-width: 1024px) {
-    border-right: none;
-    border-bottom: 1px solid var(--border);
+  const [displayName, setDisplayName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [selectedAvatar, setSelectedAvatar] = useState('🦊');
+
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [infoMessage, setInfoMessage] = useState(null);
+
+  useEffect(() => {
+    if (pendingSession) {
+      setView('google_setup');
+      setEmail(pendingSession.user.email || '');
+    }
+  }, [pendingSession]);
+
+  const checkDisplayNameTaken = async (name) => {
+    const { data } = await supabase
+      .from('profiles')
+      .select('id')
+      .ilike('display_name', name)
+      .maybeSingle();
+    return !!data;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError(null);
+    setInfoMessage(null);
+
+    // Melengkapi profil setelah login Google (session sudah ada, tinggal buat baris profil)
+    if (view === 'google_setup') {
+      if (!displayName) return setError('Nama Samaran wajib diisi.');
+      setLoading(true);
+
+      const taken = await checkDisplayNameTaken(displayName);
+      if (taken) { setError('Nama Samaran sudah digunakan. Silakan pilih yang lain.'); setLoading(false); return; }
+
+      const { data: sessionData } = await supabase.auth.getSession();
+      const userId = sessionData.session?.user?.id;
+      if (!userId) { setError('Sesi login tidak ditemukan, silakan coba lagi.'); setLoading(false); return; }
+
+      const { data: profile, error: insertError } = await supabase
+        .from('profiles')
+        .insert({ id: userId, display_name: displayName, avatar: selectedAvatar, role: 'user' })
+        .select()
+        .single();
+
+      setLoading(false);
+      if (insertError) return setError('Gagal menyimpan profil: ' + insertError.message);
+      onProfileReady(profile, sessionData.session.user.email);
+      return;
+    }
+
+    // Login pakai EMAIL + password
+    if (view === 'login') {
+      if (!email || !password) { setError('Email dan kata sandi wajib diisi.'); return; }
+      setLoading(true);
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+      setLoading(false);
+      if (signInError) setError('Email atau kata sandi salah.');
+      // Kalau berhasil, onAuthStateChange di App akan otomatis ambil alih.
+      return;
+    }
+
+    // Pendaftaran baru
+    if (view === 'register') {
+      if (!displayName || !email || !password) { setError('Semua bidang wajib diisi untuk pendaftaran.'); return; }
+      if (password.length < 6) { setError('Kata sandi minimal 6 karakter.'); return; }
+
+      setLoading(true);
+      const taken = await checkDisplayNameTaken(displayName);
+      if (taken) { setError('Nama Samaran sudah digunakan. Silakan pilih yang lain.'); setLoading(false); return; }
+
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({ email, password });
+      if (signUpError) { setLoading(false); return setError(signUpError.message); }
+
+      // Kalau project Supabase mewajibkan konfirmasi email, session belum aktif di sini.
+      if (!signUpData.session) {
+        setLoading(false);
+        setInfoMessage('Pendaftaran berhasil! Cek email kamu untuk konfirmasi sebelum masuk.');
+        setView('login');
+        return;
+      }
+
+      const { data: profile, error: insertError } = await supabase
+        .from('profiles')
+        .insert({ id: signUpData.user.id, display_name: displayName, avatar: selectedAvatar, role: 'user' })
+        .select()
+        .single();
+
+      setLoading(false);
+      if (insertError) return setError('Gagal menyimpan profil: ' + insertError.message);
+      onProfileReady(profile, signUpData.user.email);
+    }
+  };
+
+  let title = 'Selamat Datang';
+  let subtitle = 'Masuk ke ruang aman sirkelmu.';
+  if (view === 'register') {
+    title = 'Buat Anonimmu';
+    subtitle = 'Pilih karaktermu dan bagikan cerita tanpa ragu.';
+  } else if (view === 'google_setup') {
+    title = 'Lengkapi Profil';
+    subtitle = 'Satu langkah lagi untuk bergabung menggunakan Google.';
   }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-[url('https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&q=80&w=2000')] bg-cover bg-center">
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-md"></div>
+
+      <div className="relative z-10 w-full max-w-[420px] p-4 animate-in fade-in zoom-in-95 duration-500">
+        <div className="bg-white/80 backdrop-blur-2xl p-8 rounded-[2.5rem] shadow-2xl border border-white/50 relative overflow-hidden">
+          <div className="absolute -top-20 -right-20 w-40 h-40 bg-teal-400/30 rounded-full blur-3xl pointer-events-none"></div>
+          <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-indigo-400/30 rounded-full blur-3xl pointer-events-none"></div>
+
+          <div className="relative z-20">
+            <div className="flex justify-center mb-6">
+              <Logo className="w-20 h-20 drop-shadow-md" />
+            </div>
+
+            <h2 className="text-center text-3xl font-extrabold mb-2 text-slate-800 tracking-tight">{title}</h2>
+            <p className="text-center text-sm text-slate-500 mb-8 font-medium px-4">{subtitle}</p>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {(view === 'register' || view === 'google_setup') && (
+                <div className="flex flex-col items-center mb-4">
+                  <label className="block text-[11px] font-bold text-slate-500 mb-2 uppercase tracking-wider">Pilih Karaktermu</label>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {AVATARS.slice(0, 12).map(a => (
+                      <button
+                        key={a}
+                        type="button"
+                        onClick={() => setSelectedAvatar(a)}
+                        className={`text-2xl w-12 h-12 flex items-center justify-center rounded-2xl transition-all ${selectedAvatar === a ? 'bg-teal-100 scale-110 shadow-sm border border-teal-200' : 'hover:bg-slate-50 opacity-60 hover:opacity-100 grayscale hover:grayscale-0'}`}
+                      >
+                        {a}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {(view === 'register' || view === 'google_setup') && (
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">Nama Samaran</label>
+                  <input
+                    type="text"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    placeholder="Misal: KucingPekerja"
+                    className="w-full px-4 py-3.5 rounded-2xl border border-slate-200/80 bg-white/60 focus:bg-white text-slate-800 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all placeholder:text-slate-400 font-semibold text-sm shadow-sm"
+                  />
+                </div>
+              )}
+
+              {(view === 'login' || view === 'register') && (
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">Email</label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="nama@email.com"
+                    className="w-full px-4 py-3.5 rounded-2xl border border-slate-200/80 bg-white/60 focus:bg-white text-slate-800 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all placeholder:text-slate-400 font-semibold text-sm shadow-sm"
+                  />
+                </div>
+              )}
+
+              {(view === 'login' || view === 'register') && (
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                    {view === 'register' ? 'Buat Kata Sandi' : 'Kata Sandi'}
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder={view === 'register' ? 'Buat kata sandi baru...' : '••••••••'}
+                      className="w-full pl-4 pr-12 py-3.5 rounded-2xl border border-slate-200/80 bg-white/60 focus:bg-white text-slate-800 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all placeholder:text-slate-400 font-semibold text-sm shadow-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-teal-600 transition-colors"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  {view === 'register' && (
+                    <p className="text-[10px] text-amber-600/90 mt-1.5 ml-1 font-semibold flex items-center gap-1">
+                      <span>⚠️</span> Minimal 6 karakter.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {infoMessage && (
+                <div className="p-3 bg-teal-50 border border-teal-100 rounded-xl animate-in slide-in-from-top-1 fade-in">
+                  <p className="text-xs text-teal-700 font-semibold text-center">{infoMessage}</p>
+                </div>
+              )}
+
+              {error && (
+                <div className="p-3 bg-red-50 border border-red-100 rounded-xl animate-in slide-in-from-top-1 fade-in">
+                  <p className="text-xs text-red-600 font-semibold text-center">{error}</p>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3.5 mt-2 bg-slate-800 hover:bg-slate-900 text-white rounded-2xl font-bold transition-all transform active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed shadow-xl shadow-slate-900/10 flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  view === 'login' ? 'Masuk' : (view === 'register' ? 'Daftar & Mulai' : 'Simpan & Lanjutkan')
+                )}
+              </button>
+
+              {view === 'login' && (
+                <p className="text-center text-[10px] text-slate-400 mt-2">
+                  Login pakai email & kata sandi yang kamu daftarkan.
+                </p>
+              )}
+            </form>
+
+            {view !== 'google_setup' && (
+              <div className="mt-8 pt-6 border-t border-slate-200/50 text-center">
+                <p className="text-sm text-slate-500 font-medium">
+                  {view === 'login' ? 'Belum bergabung? ' : 'Sudah punya identitas? '}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setView(view === 'login' ? 'register' : 'login');
+                      setError(null);
+                      setInfoMessage(null);
+                      setDisplayName('');
+                      setPassword('');
+                      setEmail('');
+                    }}
+                    className="text-teal-600 font-extrabold hover:text-teal-700 transition-colors"
+                  >
+                    {view === 'login' ? 'Daftar sekarang' : 'Masuk di sini'}
+                  </button>
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
-#next-steps ul {
-  list-style: none;
-  padding: 0;
-  display: flex;
-  gap: 8px;
-  margin: 32px 0 0;
-
-  .logo {
-    height: 18px;
-  }
-
-  a {
-    color: var(--text-h);
-    font-size: 16px;
-    border-radius: 6px;
-    background: var(--social-bg);
-    display: flex;
-    padding: 6px 12px;
-    align-items: center;
-    gap: 8px;
-    text-decoration: none;
-    transition: box-shadow 0.3s;
-
-    &:hover {
-      box-shadow: var(--shadow);
-    }
-    .button-icon {
-      height: 18px;
-      width: 18px;
-    }
-  }
-
-  @media (max-width: 1024px) {
-    margin-top: 20px;
-    flex-wrap: wrap;
-    justify-content: center;
-
-    li {
-      flex: 1 1 calc(50% - 8px);
-    }
-
-    a {
-      width: 100%;
-      justify-content: center;
-      box-sizing: border-box;
-    }
-  }
+function TopBar({ user, onLogout, onOpenProfile }) {
+  return (
+    <header className="fixed top-0 left-0 right-0 h-16 bg-white/80 backdrop-blur-xl border-b border-slate-100 z-40 flex items-center justify-between px-4 md:px-8">
+      <div className="flex items-center gap-2">
+        <Logo className="w-10 h-10" />
+        <span className="text-xl font-extrabold text-slate-800 tracking-tight hidden sm:block">Sirkel Mental</span>
+      </div>
+      <div className="flex items-center gap-3 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-100 shadow-sm">
+        <button onClick={onOpenProfile} className="flex items-center gap-2 hover:opacity-70 transition-opacity" title="Ceritaku">
+          <span className="text-xl leading-none">{user.avatar}</span>
+          <span className="text-sm font-bold text-slate-700 hidden sm:block">{user.display_name}</span>
+        </button>
+        <div className="w-px h-4 bg-slate-200 mx-1"></div>
+        <button onClick={onLogout} className="text-slate-400 hover:text-red-500 transition-colors flex items-center justify-center" title="Keluar">
+          <LogOut className="w-4 h-4" />
+        </button>
+      </div>
+    </header>
+  );
 }
 
-#spacer {
-  height: 88px;
-  border-top: 1px solid var(--border);
-  @media (max-width: 1024px) {
-    height: 48px;
-  }
+function BottomNav({ activeTab, setActiveTab, user }) {
+  const navItems = [
+    { id: 'cerita', label: 'Cerita', icon: Home },
+    { id: 'grateful', label: 'Syukur', icon: Heart },
+    { id: 'ceritaku', label: 'Ceritaku', icon: BookOpen },
+    { id: 'relax', label: 'Relaksasi', icon: Smile },
+  ];
+  if (user.role === 'admin') navItems.push({ id: 'dashboard', label: 'Admin', icon: ShieldCheck });
+
+  return (
+    <div className="fixed bottom-0 left-0 right-0 z-50 flex justify-center pb-safe bg-gradient-to-t from-white via-white/90 to-transparent pt-6 pb-4">
+      <div className="bg-white border border-slate-100 w-[90%] max-w-sm rounded-[2rem] shadow-[0_8px_30px_rgba(0,0,0,0.08)] flex items-center justify-around px-2 py-2">
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = activeTab === item.id;
+          return (
+            <button key={item.id} onClick={() => setActiveTab(item.id)} className="relative flex flex-col items-center gap-1 p-2 w-16">
+              <div className={`p-2.5 rounded-full transition-all duration-300 ${isActive ? 'bg-teal-50 text-teal-600 scale-110' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>
+                <Icon className={`w-5 h-5 ${isActive ? 'fill-teal-100' : ''}`} strokeWidth={isActive ? 2.5 : 2} />
+              </div>
+              <span className={`text-[9px] font-bold transition-all ${isActive ? 'text-teal-600' : 'text-slate-400'}`}>{item.label}</span>
+              {isActive && <div className="absolute bottom-0 w-1 h-1 rounded-full bg-teal-500 translate-y-1" />}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
-.ticks {
-  position: relative;
-  width: 100%;
+function RuangCerita({ stories, refetchStories, isAdmin, currentUser }) {
+  const [newStory, setNewStory] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('Semua');
+  const [composeCategory, setComposeCategory] = useState('Kesehatan Mental');
+  const [posting, setPosting] = useState(false);
 
-  &::before,
-  &::after {
-    content: '';
-    position: absolute;
-    top: -4.5px;
-    border: 5px solid transparent;
+  const filteredStories = selectedCategory === 'Semua' ? stories : stories.filter(s => s.category === selectedCategory);
+
+  const handlePostStory = async (e) => {
+    e.preventDefault();
+    if (!newStory.trim()) return;
+    setPosting(true);
+    const { error } = await supabase.from('stories').insert({
+      author_id: currentUser.id,
+      category: composeCategory,
+      content: newStory
+    });
+    setPosting(false);
+    if (error) { alert('Gagal mengirim cerita: ' + error.message); return; }
+    setNewStory('');
+    refetchStories();
+  };
+
+  const handleDeleteStory = async (id) => {
+    const { error } = await supabase.from('stories').delete().eq('id', id);
+    if (error) { alert('Gagal menghapus: ' + error.message); return; }
+    refetchStories();
+  };
+
+  return (
+    <div className="max-w-xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <header className="mb-2 text-center md:text-left">
+        <h2 className="text-3xl font-extrabold text-slate-800 mb-2 tracking-tight">Ruang Cerita</h2>
+        <p className="text-slate-500 font-medium text-sm">Bagikan ceritamu dengan aman. Di sini kita saling menguatkan.</p>
+      </header>
+
+      <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 p-5 transition-all focus-within:shadow-md focus-within:border-teal-200">
+        <form onSubmit={handlePostStory}>
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center text-xl border border-slate-100 shadow-sm">
+              {currentUser.avatar}
+            </div>
+            <select
+              value={composeCategory}
+              onChange={(e) => setComposeCategory(e.target.value)}
+              className="bg-slate-50 border border-slate-100 text-slate-600 text-xs font-bold rounded-full px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+            >
+              {CATEGORIES.filter(c => c !== 'Semua').map(cat => <option key={cat} value={cat}>{cat}</option>)}
+            </select>
+          </div>
+          <textarea
+            value={newStory}
+            onChange={(e) => setNewStory(e.target.value)}
+            placeholder="Apa yang membebani pikiranmu hari ini?"
+            className="w-full bg-transparent border-none p-2 text-slate-700 text-sm focus:ring-0 resize-none min-h-[80px] placeholder:text-slate-300 font-medium outline-none"
+          />
+          <div className="flex justify-end mt-2 pt-3 border-t border-slate-50">
+            <button
+              type="submit"
+              disabled={!newStory.trim() || posting}
+              className="px-5 py-2.5 bg-slate-800 text-white rounded-full font-bold text-xs hover:bg-slate-900 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-md"
+            >
+              {posting ? 'Mengirim...' : 'Bagikan'} <Send className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0">
+        {CATEGORIES.map(cat => (
+          <button
+            key={cat}
+            onClick={() => setSelectedCategory(cat)}
+            className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all border ${selectedCategory === cat ? 'bg-slate-800 text-white border-slate-800 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+          >
+            {cat}
+          </button>
+        ))}
+      </div>
+
+      <div className="space-y-5 pb-10">
+        {filteredStories.map((story) => (
+          <StoryCard key={story.id} story={story} isAdmin={isAdmin} onDelete={() => handleDeleteStory(story.id)} refetchStories={refetchStories} currentUser={currentUser} />
+        ))}
+        {filteredStories.length === 0 && (
+          <div className="text-center py-16 bg-white/50 backdrop-blur-sm rounded-[2rem] border border-slate-200/50 border-dashed">
+            <BookOpen className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+            <h3 className="text-sm font-bold text-slate-600">Belum ada cerita</h3>
+            <p className="text-xs text-slate-400 mt-1">Jadilah yang pertama berbagi di kategori ini.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Ceritaku({ stories, refetchStories, isAdmin, currentUser }) {
+  const myStories = stories.filter(s => s.authorId === currentUser.id);
+
+  return (
+    <div className="max-w-xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <header className="mb-2 text-center md:text-left flex items-center gap-4">
+        <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center text-3xl border border-slate-100 shadow-sm shrink-0">
+          {currentUser.avatar}
+        </div>
+        <div>
+          <h2 className="text-3xl font-extrabold text-slate-800 tracking-tight">Ceritaku</h2>
+          <p className="text-slate-500 font-medium text-sm">{currentUser.display_name} · {myStories.length} cerita dibagikan</p>
+        </div>
+      </header>
+
+      <div className="space-y-5 pb-10">
+        {myStories.map((story) => (
+          <StoryCard
+            key={story.id}
+            story={story}
+            isAdmin={isAdmin}
+            onDelete={async () => {
+              const { error } = await supabase.from('stories').delete().eq('id', story.id);
+              if (error) { alert('Gagal menghapus: ' + error.message); return; }
+              refetchStories();
+            }}
+            refetchStories={refetchStories}
+            currentUser={currentUser}
+          />
+        ))}
+        {myStories.length === 0 && (
+          <div className="text-center py-16 bg-white/50 backdrop-blur-sm rounded-[2rem] border border-slate-200/50 border-dashed">
+            <BookOpen className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+            <h3 className="text-sm font-bold text-slate-600">Kamu belum membagikan cerita</h3>
+            <p className="text-xs text-slate-400 mt-1">Cerita yang kamu tulis di Ruang Cerita akan muncul di sini.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StoryCard({ story, isAdmin, onDelete, refetchStories, currentUser }) {
+  const [showComments, setShowComments] = useState(false);
+  const [newComment, setNewComment] = useState('');
+  const [reacting, setReacting] = useState(false);
+
+  const handleReaction = async (type) => {
+    if (reacting) return;
+    setReacting(true);
+    const { error } = await supabase.rpc('react_to_story', { p_story_id: story.id, p_type: type });
+    setReacting(false);
+    if (error) { alert('Gagal memberi reaksi: ' + error.message); return; }
+    refetchStories();
+  };
+
+  const handlePostComment = async (e) => {
+    e.preventDefault();
+    if (!newComment.trim()) return;
+    const { error } = await supabase.from('comments').insert({
+      story_id: story.id,
+      author_id: currentUser.id,
+      text: newComment
+    });
+    if (error) { alert('Gagal mengirim komentar: ' + error.message); return; }
+    setNewComment('');
+    refetchStories();
+  };
+
+  const handleDeleteComment = async (commentId) => {
+    const { error } = await supabase.from('comments').delete().eq('id', commentId);
+    if (error) { alert('Gagal menghapus komentar: ' + error.message); return; }
+    refetchStories();
+  };
+
+  return (
+    <div className="bg-white rounded-[2rem] shadow-[0_2px_20px_rgba(0,0,0,0.03)] border border-slate-100 p-5 transition-all hover:shadow-[0_8px_30px_rgba(0,0,0,0.06)]">
+      <div className="flex justify-between items-start mb-4">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-2xl border border-slate-100 shadow-sm">
+            {story.avatar}
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h4 className="font-extrabold text-slate-800 text-sm">{story.author}</h4>
+              <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-[9px] font-bold uppercase rounded-full tracking-wider">{story.category}</span>
+            </div>
+            <p className="text-[11px] text-slate-400 font-medium mt-0.5">{story.time}</p>
+          </div>
+        </div>
+        {(isAdmin || story.authorId === currentUser.id) && (
+          <button onClick={onDelete} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all">
+            <Trash2 className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+
+      <p className="text-slate-600 leading-relaxed mb-6 whitespace-pre-wrap text-sm font-medium">{story.content}</p>
+
+      <div className="flex flex-wrap items-center gap-2 pt-4 border-t border-slate-50">
+        {REACTIONS_LIST.map(reaction => {
+          const count = story.reactions[reaction.id] || 0;
+          if (count === 0) return null;
+          return (
+            <button
+              key={reaction.id}
+              onClick={() => handleReaction(reaction.id)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all border bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
+            >
+              <span>{reaction.icon}</span> {count}
+            </button>
+          );
+        })}
+
+        <div className="relative group/picker ml-1">
+          <button className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-50 text-slate-400 hover:bg-slate-100 border border-slate-200 transition-colors">
+            <Plus className="w-3.5 h-3.5" />
+          </button>
+          <div className="absolute left-0 bottom-full mb-2 bg-white border border-slate-100 rounded-2xl p-1.5 shadow-xl opacity-0 invisible group-hover/picker:opacity-100 group-hover/picker:visible transition-all flex gap-1 z-10 translate-y-2 group-hover/picker:translate-y-0">
+            {REACTIONS_LIST.map(reaction => (
+              <button key={`pick-${reaction.id}`} onClick={() => handleReaction(reaction.id)} className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-50 text-lg transition-transform hover:scale-125" title={reaction.label}>
+                {reaction.icon}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <button
+          onClick={() => setShowComments(!showComments)}
+          className={`ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all border ${showComments ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+        >
+          <MessageCircle className="w-3.5 h-3.5" /> {story.comments.length}
+        </button>
+      </div>
+
+      {showComments && (
+        <div className="mt-4 p-3 bg-slate-50/50 rounded-2xl border border-slate-100 space-y-3 animate-in fade-in slide-in-from-top-2">
+          {story.comments.length > 0 ? (
+            story.comments.map(comment => (
+              <div key={comment.id} className="flex gap-2.5 text-sm group/comment">
+                <div className="w-7 h-7 rounded-full bg-white border border-slate-200 flex-shrink-0 flex items-center justify-center text-sm shadow-sm">{comment.avatar}</div>
+                <div className="bg-white px-3 py-2.5 rounded-2xl rounded-tl-none border border-slate-100 shadow-sm flex-1 relative">
+                  <div className="flex justify-between items-center mb-0.5">
+                    <span className="font-extrabold text-slate-700 text-xs flex items-center gap-1">
+                      {comment.author} {comment.isAdmin && <ShieldCheck className="w-3 h-3 text-teal-500" />}
+                    </span>
+                    {isAdmin && (
+                      <button onClick={() => handleDeleteComment(comment.id)} className="opacity-0 group-hover/comment:opacity-100 text-slate-300 hover:text-red-500 transition-opacity p-1">
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-slate-600 text-xs font-medium leading-relaxed">{comment.text}</p>
+                </div>
+              </div>
+            ))
+          ) : (
+            <p className="text-center text-xs text-slate-400 py-2">Jadilah yang pertama menanggapi.</p>
+          )}
+
+          <form onSubmit={handlePostComment} className="flex gap-2 mt-2 relative">
+            <input
+              type="text"
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              placeholder="Tulis balasan positif..."
+              className="flex-1 bg-white border border-slate-200 rounded-full pl-4 pr-10 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all font-medium shadow-sm"
+            />
+            <button type="submit" disabled={!newComment.trim()} className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 bg-slate-800 text-white rounded-full hover:bg-slate-900 disabled:opacity-50 transition-colors">
+              <Send className="w-3 h-3" />
+            </button>
+          </form>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WallOfGrateful({ gratitudes, refetchGratitudes, isAdmin, currentUser }) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+  const [isWriting, setIsWriting] = useState(false);
+  const [newNote, setNewNote] = useState('');
+  const [posting, setPosting] = useState(false);
+
+  const gradients = [
+    'from-emerald-400 to-teal-500',
+    'from-amber-400 to-orange-500',
+    'from-blue-400 to-indigo-500',
+    'from-rose-400 to-pink-500',
+    'from-purple-400 to-fuchsia-500'
+  ];
+
+  useEffect(() => {
+    if (gratitudes.length <= 1 || isPaused || isWriting) return;
+    const timer = setInterval(() => setCurrentIndex((prev) => (prev + 1) % gratitudes.length), 5000);
+    return () => clearInterval(timer);
+  }, [gratitudes.length, isPaused, isWriting]);
+
+  const handlePrev = () => setCurrentIndex((prev) => (prev - 1 + gratitudes.length) % gratitudes.length);
+  const handleNext = () => setCurrentIndex((prev) => (prev + 1) % gratitudes.length);
+
+  const handleAddNote = async (e) => {
+    e.preventDefault();
+    if (!newNote.trim()) return;
+    setPosting(true);
+    const { error } = await supabase.from('gratitudes').insert({
+      author_id: currentUser.id,
+      text: newNote,
+      color: gradients[Math.floor(Math.random() * gradients.length)]
+    });
+    setPosting(false);
+    if (error) { alert('Gagal mengirim: ' + error.message); return; }
+    setNewNote('');
+    setIsWriting(false);
+    setCurrentIndex(0);
+    refetchGratitudes();
+  };
+
+  const handleReaction = async (noteId, type) => {
+    const { error } = await supabase.rpc('react_to_gratitude', { p_gratitude_id: noteId, p_type: type });
+    if (error) { alert('Gagal memberi reaksi: ' + error.message); return; }
+    refetchGratitudes();
+  };
+
+  const handleDelete = async (id) => {
+    const { error } = await supabase.from('gratitudes').delete().eq('id', id);
+    if (error) { alert('Gagal menghapus: ' + error.message); return; }
+    if (currentIndex >= gratitudes.length - 1) setCurrentIndex(Math.max(0, gratitudes.length - 2));
+    refetchGratitudes();
+  };
+
+  if (gratitudes.length === 0) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center pt-8 pb-20 px-4 text-center">
+        <h2 className="text-3xl font-extrabold text-slate-800 mb-2 font-serif italic">River of Gratitude</h2>
+        <p className="text-slate-500 text-sm font-medium mb-6">Belum ada catatan syukur. Jadilah yang pertama menulis.</p>
+        <button onClick={() => setIsWriting(true)} className="bg-slate-800 text-white p-4 rounded-2xl shadow-xl hover:bg-slate-900 transition-all">
+          <Plus className="w-6 h-6" />
+        </button>
+        {isWriting && (
+          <GratitudeComposer newNote={newNote} setNewNote={setNewNote} onCancel={() => setIsWriting(false)} onSubmit={handleAddNote} posting={posting} />
+        )}
+      </div>
+    );
   }
 
-  &::before {
-    left: 0;
-    border-left-color: var(--border);
-  }
-  &::after {
-    right: 0;
-    border-right-color: var(--border);
-  }
+  return (
+    <div className="h-full flex flex-col items-center justify-center pt-8 pb-20 relative px-4">
+      <header className="mb-10 text-center z-10 w-full">
+        <h2 className="text-3xl font-extrabold text-slate-800 mb-2 font-serif italic">River of Gratitude</h2>
+        <p className="text-slate-500 text-sm font-medium">Berdiam sejenak, baca rasa syukur mereka, dan bagikan milikmu.</p>
+      </header>
+
+      <div
+        className="relative w-full max-w-md aspect-[4/5] md:aspect-square"
+        onMouseEnter={() => setIsPaused(true)}
+        onMouseLeave={() => setIsPaused(false)}
+        onTouchStart={() => setIsPaused(true)}
+        onTouchEnd={() => setIsPaused(false)}
+      >
+        <button onClick={handlePrev} className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 md:-translate-x-12 z-20 p-2 bg-white/80 backdrop-blur shadow-md rounded-full text-slate-600 hover:scale-110 transition-all">
+          <ChevronLeft className="w-5 h-5" />
+        </button>
+        <button onClick={handleNext} className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 md:translate-x-12 z-20 p-2 bg-white/80 backdrop-blur shadow-md rounded-full text-slate-600 hover:scale-110 transition-all">
+          <ChevronRight className="w-5 h-5" />
+        </button>
+
+        <div className="w-full h-full relative perspective-1000">
+          {gratitudes.map((note, idx) => {
+            const isActive = idx === currentIndex;
+            const isPrev = idx === (currentIndex - 1 + gratitudes.length) % gratitudes.length;
+            const isNext = idx === (currentIndex + 1) % gratitudes.length;
+
+            let transform = 'translateX(100%) scale(0.8) opacity-0';
+            if (isActive) transform = 'translateX(0) scale(1) opacity-100';
+            else if (isPrev) transform = 'translateX(-20%) scale(0.8) opacity-0';
+            else if (isNext) transform = 'translateX(20%) scale(0.8) opacity-0';
+
+            return (
+              <div key={note.id} className="absolute inset-0 transition-all duration-700 ease-in-out origin-center" style={{ transform, zIndex: isActive ? 10 : 0, pointerEvents: isActive ? 'auto' : 'none' }}>
+                <div className={`w-full h-full rounded-[2.5rem] bg-gradient-to-br ${note.color} p-8 flex flex-col justify-between shadow-2xl relative overflow-hidden group`}>
+                  <div className="absolute inset-0 bg-white/20 backdrop-blur-[2px]"></div>
+                  <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-white/30 rounded-full blur-3xl"></div>
+
+                  {isAdmin && isActive && (
+                    <button onClick={() => handleDelete(note.id)} className="absolute top-4 right-4 z-20 p-2 bg-black/20 text-white rounded-full hover:bg-red-500/80 transition-colors">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+
+                  <div className="relative z-10 mt-4 text-center">
+                    <span className="text-5xl opacity-80 mb-4 block">✨</span>
+                    <p className="font-bold text-xl md:text-2xl leading-relaxed text-white drop-shadow-md font-serif italic">"{note.text}"</p>
+                  </div>
+
+                  <div className="relative z-10 flex flex-col items-center mt-auto">
+                    <div className="flex items-center gap-2 bg-white/20 backdrop-blur-md px-4 py-2 rounded-full mb-6 border border-white/30">
+                      <span className="text-xl">{note.avatar}</span>
+                      <span className="text-sm font-bold text-white drop-shadow-sm">{note.author}</span>
+                    </div>
+                    <div className="flex flex-wrap justify-center gap-2">
+                      {REACTIONS_LIST.map(reaction => {
+                        const count = note.reactions[reaction.id] || 0;
+                        return (
+                          <button key={reaction.id} onClick={() => handleReaction(note.id, reaction.id)} className="flex items-center gap-1.5 px-3 py-1.5 bg-white/80 hover:bg-white text-slate-700 rounded-full text-xs font-bold transition-transform hover:scale-110 shadow-sm">
+                            <span>{reaction.icon}</span> {count > 0 && <span className="opacity-70">{count}</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 flex gap-1.5">
+          {gratitudes.map((_, idx) => (
+            <div key={idx} className={`h-1.5 rounded-full transition-all duration-300 ${idx === currentIndex ? 'w-4 bg-teal-500' : 'w-1.5 bg-slate-300'}`} />
+          ))}
+        </div>
+      </div>
+
+      {!isWriting ? (
+        <button onClick={() => setIsWriting(true)} className="fixed bottom-28 right-6 md:absolute md:bottom-10 md:right-0 z-30 bg-slate-800 text-white p-4 rounded-2xl shadow-xl hover:scale-105 hover:bg-slate-900 transition-all group">
+          <Plus className="w-6 h-6 group-hover:rotate-90 transition-transform duration-300" />
+        </button>
+      ) : (
+        <GratitudeComposer newNote={newNote} setNewNote={setNewNote} onCancel={() => setIsWriting(false)} onSubmit={handleAddNote} posting={posting} />
+      )}
+    </div>
+  );
+}
+
+function GratitudeComposer({ newNote, setNewNote, onCancel, onSubmit, posting }) {
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+      <div className="bg-white w-full max-w-md rounded-[2.5rem] p-6 shadow-2xl relative animate-in zoom-in-95">
+        <h3 className="text-lg font-extrabold text-slate-800 mb-4 text-center">Tulis Syukurmu</h3>
+        <form onSubmit={onSubmit}>
+          <textarea
+            value={newNote}
+            onChange={(e) => setNewNote(e.target.value)}
+            autoFocus
+            placeholder="Hal kecil apa yang membuatmu tersenyum hari ini?"
+            className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm font-medium focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none min-h-[120px] resize-none"
+          />
+          <div className="flex gap-3 mt-4">
+            <button type="button" onClick={onCancel} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-200 transition-colors">Batal</button>
+            <button type="submit" disabled={!newNote.trim() || posting} className="flex-1 py-3 bg-slate-800 text-white rounded-xl font-bold text-sm hover:bg-slate-900 disabled:opacity-50 transition-colors shadow-lg">
+              {posting ? 'Mengirim...' : 'Kirim'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function RuangRelaksasi() {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const audioRef = useRef(null);
+
+  useEffect(() => {
+    if (!audioRef.current) return;
+    if (isPlaying && soundEnabled) {
+      audioRef.current.play().catch(() => {});
+    } else {
+      audioRef.current.pause();
+    }
+  }, [isPlaying, soundEnabled]);
+
+  return (
+    <div className="h-[80vh] flex flex-col items-center justify-center py-10 animate-in zoom-in-95 duration-700 relative">
+      {/* Taruh file musik kamu di folder public/audio/relaxation.mp3 */}
+      <audio ref={audioRef} src="/audio/relaxation.mp3" loop />
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes gentleBreathe {
+          0%, 100% { transform: scale(1); box-shadow: 0 0 60px rgba(45, 212, 191, 0.2); border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%; }
+          40% { transform: scale(1.8); box-shadow: 0 0 120px rgba(45, 212, 191, 0.5); border-radius: 50%; }
+          60% { transform: scale(1.8); box-shadow: 0 0 120px rgba(45, 212, 191, 0.5); border-radius: 50%; }
+        }
+        @keyframes textBreatheFade {
+          0%, 30% { content: "Tarik Napas"; opacity: 1; letter-spacing: 2px; }
+          31%, 39% { opacity: 0; }
+          40%, 60% { content: "Tahan"; opacity: 1; letter-spacing: 4px; }
+          61%, 69% { opacity: 0; }
+          70%, 95% { content: "Hembuskan"; opacity: 1; letter-spacing: 2px; }
+          96%, 100% { opacity: 0; }
+        }
+        .premium-breathe.active { animation: gentleBreathe 12s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+        .premium-text.active::after { content: "Tarik Napas"; animation: textBreatheFade 12s ease-in-out infinite; }
+      `}} />
+
+      <div className="text-center mb-16 relative z-10">
+        <h2 className="text-3xl font-extrabold text-slate-800 mb-2 tracking-tight">Ruang Relaksasi</h2>
+        <p className="text-slate-500 max-w-xs mx-auto font-medium text-sm">Ikuti ritme lingkaran. Luangkan waktu sejenak untuk mengembalikan fokusmu.</p>
+      </div>
+
+      <div className="relative w-64 h-64 flex items-center justify-center my-12 z-0">
+        <div className={`absolute w-56 h-56 bg-teal-300/20 blur-3xl rounded-full transition-all duration-1000 ${isPlaying ? 'scale-[1.8]' : 'scale-100'}`}></div>
+        <div className={`absolute w-48 h-48 bg-indigo-300/20 blur-2xl rounded-full transition-all duration-1000 delay-150 ${isPlaying ? 'scale-[1.5]' : 'scale-100'}`}></div>
+        <div
+          className={`premium-breathe w-36 h-36 bg-gradient-to-br from-teal-300 to-emerald-400 flex items-center justify-center shadow-xl transition-all duration-1000 border-4 border-white/40 backdrop-blur-md ${isPlaying ? 'active' : 'rounded-full hover:scale-105 cursor-pointer'}`}
+          onClick={() => !isPlaying && setIsPlaying(true)}
+        ></div>
+        <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+          <span className={`text-white font-extrabold text-xl drop-shadow-lg transition-opacity duration-500 uppercase tracking-widest ${isPlaying ? 'premium-text active' : 'opacity-100'}`}>
+            {!isPlaying && 'Mulai'}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3 mt-12 bg-white/80 backdrop-blur-md p-2 rounded-full shadow-md border border-slate-100 relative z-10">
+        <button onClick={() => setIsPlaying(!isPlaying)} className={`w-12 h-12 flex items-center justify-center rounded-full transition-all ${isPlaying ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' : 'bg-slate-800 text-white hover:bg-slate-900 shadow-md'}`}>
+          {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-1" />}
+        </button>
+        <div className="w-px h-8 bg-slate-200"></div>
+        <button onClick={() => setSoundEnabled(!soundEnabled)} className={`w-10 h-10 flex items-center justify-center rounded-full transition-colors ${soundEnabled ? 'bg-teal-50 text-teal-600' : 'bg-slate-50 text-slate-400'}`}>
+          {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const WEEKDAY_LABELS = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
+
+function AdminDashboard() {
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({ users: 0, stories: 0, gratitudes: 0, interactions: 0 });
+  const [weeklyActivity, setWeeklyActivity] = useState([0, 0, 0, 0, 0, 0, 0]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadStats() {
+      setLoading(true);
+
+      const [
+        { count: userCount },
+        { count: storyCount },
+        { count: gratitudeCount },
+        { count: commentCount },
+        { data: storyReactionRows },
+        { data: gratitudeReactionRows }
+      ] = await Promise.all([
+        supabase.from('profiles').select('*', { count: 'exact', head: true }),
+        supabase.from('stories').select('*', { count: 'exact', head: true }),
+        supabase.from('gratitudes').select('*', { count: 'exact', head: true }),
+        supabase.from('comments').select('*', { count: 'exact', head: true }),
+        supabase.from('stories').select('reactions'),
+        supabase.from('gratitudes').select('reactions')
+      ]);
+
+      const sumReactions = (rows) =>
+        (rows || []).reduce((total, row) => {
+          const values = Object.values(row.reactions || {});
+          return total + values.reduce((a, b) => a + (Number(b) || 0), 0);
+        }, 0);
+
+      const totalReactions = sumReactions(storyReactionRows) + sumReactions(gratitudeReactionRows);
+      const totalInteractions = totalReactions + (commentCount || 0);
+
+      // Aktivitas cerita per hari, untuk minggu berjalan (Senin - Minggu)
+      const now = new Date();
+      const dayIndex = (now.getDay() + 6) % 7; // Senin = 0 ... Minggu = 6
+      const monday = new Date(now);
+      monday.setDate(now.getDate() - dayIndex);
+      monday.setHours(0, 0, 0, 0);
+
+      const { data: weekStories } = await supabase
+        .from('stories')
+        .select('created_at')
+        .gte('created_at', monday.toISOString());
+
+      const counts = [0, 0, 0, 0, 0, 0, 0];
+      (weekStories || []).forEach((s) => {
+        const d = new Date(s.created_at);
+        const idx = (d.getDay() + 6) % 7;
+        counts[idx] += 1;
+      });
+
+      if (!mounted) return;
+      setStats({
+        users: userCount || 0,
+        stories: storyCount || 0,
+        gratitudes: gratitudeCount || 0,
+        interactions: totalInteractions
+      });
+      setWeeklyActivity(counts);
+      setLoading(false);
+    }
+
+    loadStats();
+    return () => { mounted = false; };
+  }, []);
+
+  const statCards = [
+    { label: 'Total Pengguna', value: stats.users, color: 'from-blue-500 to-indigo-500' },
+    { label: 'Cerita Aktif', value: stats.stories, color: 'from-purple-500 to-pink-500' },
+    { label: 'Catatan Syukur', value: stats.gratitudes, color: 'from-emerald-400 to-teal-500' },
+    { label: 'Interaksi', value: stats.interactions, color: 'from-amber-400 to-orange-500' },
+  ];
+
+  const maxActivity = Math.max(...weeklyActivity, 1);
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-300 pb-10">
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+        <div>
+          <h2 className="text-3xl font-extrabold text-slate-800 mb-1">Admin Panel</h2>
+          <p className="text-slate-500 font-medium text-sm">Ringkasan aktivitas platform Sirkel Mental.</p>
+        </div>
+        <div className="flex items-center gap-2 bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-lg border border-emerald-100 font-bold text-xs shadow-sm">
+          <ShieldCheck className="w-3.5 h-3.5" /> Moderator Aktif
+        </div>
+      </header>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {statCards.map((stat, idx) => (
+          <div key={idx} className="bg-white p-4 md:p-5 rounded-3xl border border-slate-100 shadow-sm relative overflow-hidden group">
+            <div className={`absolute top-0 right-0 w-20 h-20 bg-gradient-to-br ${stat.color} rounded-bl-full opacity-10 group-hover:opacity-20 transition-opacity`}></div>
+            <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">{stat.label}</span>
+            <div className="mt-2 flex items-end justify-between relative z-10">
+              <span className="text-2xl md:text-3xl font-extrabold text-slate-800">{loading ? '...' : stat.value}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col">
+        <h3 className="font-extrabold text-slate-800 text-lg mb-6">Aktivitas Mingguan (Cerita Baru)</h3>
+        <div className="flex-1 flex items-end justify-between gap-2 pt-4 pb-2 h-40 border-b border-slate-100">
+          {weeklyActivity.map((count, i) => (
+            <div key={i} className="w-full relative group flex flex-col items-center">
+              <div
+                className="w-full bg-gradient-to-t from-teal-400 to-emerald-300 rounded-t-lg transition-all duration-500 hover:opacity-80"
+                style={{ height: `${loading ? 4 : Math.max(4, (count / maxActivity) * 100)}%` }}
+                title={`${count} cerita`}
+              ></div>
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-between mt-3 text-[10px] text-slate-400 font-bold uppercase tracking-wide px-1">
+          {WEEKDAY_LABELS.map((label) => <span key={label}>{label}</span>)}
+        </div>
+      </div>
+
+      <div className="bg-gradient-to-r from-red-50 to-rose-50 border border-red-100 p-5 rounded-3xl flex items-start gap-3">
+        <div className="p-2 bg-red-100/50 text-red-600 rounded-xl shrink-0 mt-0.5">
+          <MoreVertical className="w-5 h-5" />
+        </div>
+        <div>
+          <h4 className="font-extrabold text-red-800 text-sm">Wewenang Moderator</h4>
+          <p className="text-xs text-red-700/80 mt-1 font-medium leading-relaxed">
+            Anda dapat menghapus Postingan dan Komentar di Ruang Cerita, serta Kiriman di River of Gratitude untuk menjaga keamanan komunitas.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
 }
