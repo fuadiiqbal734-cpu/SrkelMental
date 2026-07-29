@@ -488,7 +488,7 @@ function TopBar({ user, onLogout, onOpenProfile }) {
   return (
     <header className="fixed top-0 left-0 right-0 h-16 bg-white/80 backdrop-blur-xl border-b border-slate-100 z-40 flex items-center justify-between px-4 md:px-8">
       <div className="flex items-center gap-3">
-        <div className="bg-gradient-to-tr from-teal-400 to-emerald-400 p-1.5 rounded-xl shadow-sm">
+        <div className="bg-gradient-to-tr rounded-xl shadow-sm">
           <Logo className="w-5 h-5 text-white" />
         </div>
         <span className="text-sm sm:text-xl font-extrabold text-slate-800 tracking-tight">Sirkel Mental</span>
