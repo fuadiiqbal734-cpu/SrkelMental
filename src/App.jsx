@@ -491,7 +491,7 @@ function TopBar({ user, onLogout, onOpenProfile }) {
         <div className="bg-gradient-to-tr from-teal-400 to-emerald-400 p-1.5 rounded-xl shadow-sm">
           <Logo className="w-5 h-5 text-white" />
         </div>
-        <span className="text-xl font-extrabold text-slate-800 tracking-tight hidden sm:block">Sirkel Mental</span>
+        <span className="text-sm sm:text-xl font-extrabold text-slate-800 tracking-tight">Sirkel Mental</span>
       </div>
       <div className="flex items-center gap-3 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-100 shadow-sm">
         <button onClick={onOpenProfile} className="flex items-center gap-2 hover:opacity-70 transition-opacity" title="Ceritaku">
