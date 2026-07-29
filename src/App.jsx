@@ -488,10 +488,10 @@ function TopBar({ user, onLogout, onOpenProfile }) {
   return (
     <header className="fixed top-0 left-0 right-0 h-16 bg-white/80 backdrop-blur-xl border-b border-slate-100 z-40 flex items-center justify-between px-4 md:px-8">
       <div className="flex items-center gap-3">
-        <div className="bg-gradient-to-tr rounded-xl shadow-sm">
-          <Logo className="w-5 h-5 text-white" />
+         <div className="bg-white border border-slate-200 p-1.5 rounded-xl shadow-sm flex items-center justify-center">
+          <Logo className="w-8 h-8" />  
         </div>
-        <span className="text-sm sm:text-xl font-extrabold text-slate-800 tracking-tight">Sirkel Mental</span>
+        <span className="text-base sm:text-2xl font-extrabold text-slate-800 tracking-tight">Sirkel Mental</span>
       </div>
       <div className="flex items-center gap-3 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-100 shadow-sm">
         <button onClick={onOpenProfile} className="flex items-center gap-2 hover:opacity-70 transition-opacity" title="Ceritaku">
