@@ -48,7 +48,7 @@ function timeAgo(dateString) {
 
 function Logo({ className }) {
   const [imgError, setImgError] = useState(false);
-  if (imgError) return <Wind className={className} />;
+  if (imgError) return <Wind className={`${className} text-teal-600`} />;
   // Taruh file logo kamu di folder public/logo.png -- kalau belum ada, otomatis fallback ke ikon Wind
   return <img src="/logo.png" alt="Sirkel Mental" className={`${className} object-contain`} onError={() => setImgError(true)} />;
 }
@@ -182,7 +182,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-50 via-slate-50 to-teal-50 font-sans text-slate-800 flex flex-col selection:bg-teal-200 selection:text-teal-900 overflow-hidden">
-      <TopBar user={currentUser} onLogout={handleLogout} onOpenProfile={() => setActiveTab('ceritaku')} />
+      <TopBar user={currentUser} onLogout={handleLogout} onOpenProfile={() => setActiveTab('ceritaku')} onGoHome={() => setActiveTab('cerita')} />
 
       <main className="flex-1 overflow-y-auto pt-24 pb-28 relative scroll-smooth h-[100dvh]">
         <div className="max-w-2xl mx-auto px-4 md:px-0">
@@ -343,7 +343,7 @@ function AuthScreen({ pendingSession, onProfileReady }) {
 
           <div className="relative z-20">
             <div className="flex justify-center mb-6">
-              <Logo className="w-20 h-20" />
+              <Logo className="w-20 h-20 drop-shadow-md" />
             </div>
 
             <h2 className="text-center text-3xl font-extrabold mb-2 text-slate-800 tracking-tight">{title}</h2>
@@ -375,7 +375,7 @@ function AuthScreen({ pendingSession, onProfileReady }) {
                     type="text"
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value)}
-                    placeholder="Misal: SenjaLara"
+                    placeholder="Misal: KucingPekerja"
                     className="w-full px-4 py-3.5 rounded-2xl border border-slate-200/80 bg-white/60 focus:bg-white text-slate-800 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all placeholder:text-slate-400 font-semibold text-sm shadow-sm"
                   />
                 </div>
@@ -482,13 +482,13 @@ function AuthScreen({ pendingSession, onProfileReady }) {
   );
 }
 
-function TopBar({ user, onLogout, onOpenProfile }) {
+function TopBar({ user, onLogout, onOpenProfile, onGoHome }) {
   return (
     <header className="fixed top-0 left-0 right-0 h-16 bg-white/80 backdrop-blur-xl border-b border-slate-100 z-40 flex items-center justify-between px-4 md:px-8">
-      <div className="flex items-center gap-3">
+      <button onClick={onGoHome} className="flex items-center gap-2 hover:opacity-70 transition-opacity">
         <Logo className="w-10 h-10" />
-        <span className="text-base sm:text-2xl font-extrabold text-slate-800 tracking-tight">Sirkel Mental</span>
-      </div>
+        <span className="text-xl font-extrabold text-slate-800 tracking-tight hidden sm:block">Sirkel Mental</span>
+      </button>
       <div className="flex items-center gap-3 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-100 shadow-sm">
         <button onClick={onOpenProfile} className="flex items-center gap-2 hover:opacity-70 transition-opacity" title="Ceritaku">
           <span className="text-xl leading-none">{user.avatar}</span>
