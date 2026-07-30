@@ -50,7 +50,7 @@ function Logo({ className }) {
   const [imgError, setImgError] = useState(false);
   if (imgError) return <Wind className={className} />;
   // Taruh file logo kamu di folder public/logo.png -- kalau belum ada, otomatis fallback ke ikon Wind
-  return <img src="/logo.png" alt="Sirkel Mental" className={className} onError={() => setImgError(true)} />;
+  return <img src="/logo.png" alt="Sirkel Mental" className={`${className} object-contain`} onError={() => setImgError(true)} />;
 }
 
 export default function App() {
@@ -343,9 +343,7 @@ function AuthScreen({ pendingSession, onProfileReady }) {
 
           <div className="relative z-20">
             <div className="flex justify-center mb-6">
-              <div className="w-16 h-16 bg-gradient-to-tr from-teal-400 to-emerald-300 rounded-3xl flex items-center justify-center shadow-lg transform rotate-3">
-                <Logo className="w-8 h-8 text-white -rotate-3" />
-              </div>
+              <Logo className="w-20 h-20" />
             </div>
 
             <h2 className="text-center text-3xl font-extrabold mb-2 text-slate-800 tracking-tight">{title}</h2>
@@ -377,7 +375,7 @@ function AuthScreen({ pendingSession, onProfileReady }) {
                     type="text"
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value)}
-                    placeholder="Misal: KucingPekerja"
+                    placeholder="Misal: SenjaLara"
                     className="w-full px-4 py-3.5 rounded-2xl border border-slate-200/80 bg-white/60 focus:bg-white text-slate-800 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all placeholder:text-slate-400 font-semibold text-sm shadow-sm"
                   />
                 </div>
@@ -488,9 +486,7 @@ function TopBar({ user, onLogout, onOpenProfile }) {
   return (
     <header className="fixed top-0 left-0 right-0 h-16 bg-white/80 backdrop-blur-xl border-b border-slate-100 z-40 flex items-center justify-between px-4 md:px-8">
       <div className="flex items-center gap-3">
-         <div className="bg-white border border-slate-200 p-1.5 rounded-xl shadow-sm flex items-center justify-center">
-          <Logo className="w-8 h-8" />  
-        </div>
+        <Logo className="w-10 h-10" />
         <span className="text-base sm:text-2xl font-extrabold text-slate-800 tracking-tight">Sirkel Mental</span>
       </div>
       <div className="flex items-center gap-3 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-100 shadow-sm">
