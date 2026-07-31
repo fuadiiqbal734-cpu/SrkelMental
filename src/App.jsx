@@ -375,7 +375,7 @@ function AuthScreen({ pendingSession, onProfileReady }) {
                     type="text"
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value)}
-                    placeholder="Misal: KucingPekerja"
+                    placeholder="Misal: Senja Lara"
                     className="w-full px-4 py-3.5 rounded-2xl border border-slate-200/80 bg-white/60 focus:bg-white text-slate-800 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all placeholder:text-slate-400 font-semibold text-sm shadow-sm"
                   />
                 </div>
@@ -487,7 +487,7 @@ function TopBar({ user, onLogout, onOpenProfile, onGoHome }) {
     <header className="fixed top-0 left-0 right-0 h-16 bg-white/80 backdrop-blur-xl border-b border-slate-100 z-40 flex items-center justify-between px-4 md:px-8">
       <button onClick={onGoHome} className="flex items-center gap-2 hover:opacity-70 transition-opacity">
         <Logo className="w-10 h-10" />
-        <span className="text-xl font-extrabold text-slate-800 tracking-tight hidden sm:block">Sirkel Mental</span>
+        <span className="text-lg sm:text-3xl font-extrabold text-slate-800 tracking-tight">Sirkel Mental</span>
       </button>
       <div className="flex items-center gap-3 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-100 shadow-sm">
         <button onClick={onOpenProfile} className="flex items-center gap-2 hover:opacity-70 transition-opacity" title="Ceritaku">
